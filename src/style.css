@@ -3,3 +3,21 @@
   vertical-align: top;
   border: 1px solid salmon;
 }
+
+/* Canvas border */
+#stage {
+  border: 2px solid #00449f; /* or #000 */
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  display: block;
+}
+
+/* Optional: put everything on a bordered "page" */
+.app-card {
+  border: 2px solid #e3e3e3;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 640px;
+  margin: 16px auto;
+  background: white;
+}
