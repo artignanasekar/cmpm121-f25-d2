@@ -1,6 +1,3 @@
-// CMPM 121 • D2 — Sticker Sketchbook (Step 3: stroke history + Undo/Redo)
-// Strict TS-safe. Keeps your example image.
-
 import exampleIconUrl from "./noun-paperclip-7598668-00449F.png";
 import "./style.css";
 
@@ -89,7 +86,6 @@ import "./style.css";
 
   // ---- Render ----
   function drawStroke(s: Stroke): void {
-    // Safe destructuring avoids "possibly undefined" on indexes
     if (s.points.length < 2) return;
     const [first, ...rest] = s.points;
     if (!first) return;
@@ -99,9 +95,8 @@ import "./style.css";
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
 
-    // Iterate over a copy that skips the first point
+    // iterate over a copy that skips the first point
     for (const pt of rest) {
-      // pt is guaranteed here
       ctx.lineTo(pt.x, pt.y);
     }
     ctx.stroke();
@@ -124,7 +119,6 @@ import "./style.css";
     redoBtn.disabled = redoStack.length === 0;
   }
 
-  // ---- Direct draw + record stroke (Step 3) ----
   canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
     redoStack.length = 0; // new input invalidates redo history
@@ -195,7 +189,6 @@ import "./style.css";
   redoBtn.addEventListener("click", doRedo);
   clearBtn.addEventListener("click", doClear);
 
-  // Keyboard shortcuts
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
