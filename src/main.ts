@@ -4,10 +4,8 @@ import "./style.css";
 (() => {
   "use strict";
 
-  // Prefer #app if present in the template
   const root = (document.querySelector("#app") ?? document.body) as HTMLElement;
 
-  // --- Example image from the starter ---
   const exampleP = document.createElement("p");
   const img = document.createElement("img");
   img.src = exampleIconUrl;
@@ -16,12 +14,10 @@ import "./style.css";
   exampleP.appendChild(img);
   root.appendChild(exampleP);
 
-  // --- Title ---
   const h1 = document.createElement("h1");
   h1.textContent = "Sticker Sketchbook (D2)";
   root.appendChild(h1);
 
-  // --- Toolbar (Step 3 adds Undo/Redo) ---
   const toolbar = document.createElement("div");
   toolbar.className = "toolbar";
 
@@ -37,12 +33,9 @@ import "./style.css";
   clearBtn.type = "button";
   clearBtn.textContent = "Clear";
 
-  toolbar.appendChild(undoBtn);
-  toolbar.appendChild(redoBtn);
-  toolbar.appendChild(clearBtn);
+  toolbar.append(undoBtn, redoBtn, clearBtn);
   root.appendChild(toolbar);
 
-  // --- Canvas ---
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 256;
@@ -53,13 +46,11 @@ import "./style.css";
 
   const note = document.createElement("p");
   note.className = "note";
-  note.textContent = "Step 3 — stroke history with Undo/Redo.";
+  note.textContent = "Step 4 — undo/redo + event-driven redraw.";
   root.appendChild(note);
 
-  // --- 2D context (non-null for strict TS) ---
   const ctx = canvas.getContext("2d")!;
 
-  // Marker style (default)
   const DEFAULT_WIDTH = 4;
   const DEFAULT_COLOR = "#111";
   ctx.lineCap = "round";
@@ -67,15 +58,12 @@ import "./style.css";
   ctx.lineWidth = DEFAULT_WIDTH;
   ctx.strokeStyle = DEFAULT_COLOR;
 
-  // --- Types ---
   type Point = { x: number; y: number };
   type Stroke = { points: Point[]; width: number; color: string };
 
-  // --- History state ---
-  const history: Stroke[] = [];
-  const redoStack: Stroke[] = [];
+  const history: Stroke[] = []; // display list
+  const redoStack: Stroke[] = []; // redo history
 
-  // --- Drawing state ---
   let isDrawing = false;
   let currentStroke: Stroke | null = null;
 
@@ -84,21 +72,17 @@ import "./style.css";
     return { x: evt.clientX - r.left, y: evt.clientY - r.top };
   }
 
-  // ---- Render ----
   function drawStroke(s: Stroke): void {
-    if (s.points.length < 2) return;
-    const [first, ...rest] = s.points;
-    if (!first) return;
+    if (s.points.length === 0) return;
+    // Assert non-empty tuple so 'first' isn’t possibly undefined under strict TS
+    const [first, ...rest] = s.points as [Point, ...Point[]];
 
     ctx.lineWidth = s.width;
     ctx.strokeStyle = s.color;
+
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
-
-    // iterate over a copy that skips the first point
-    for (const pt of rest) {
-      ctx.lineTo(pt.x, pt.y);
-    }
+    for (const pt of rest) ctx.lineTo(pt.x, pt.y);
     ctx.stroke();
     ctx.closePath();
   }
@@ -106,36 +90,46 @@ import "./style.css";
   function redrawAll(): void {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const s of history) drawStroke(s);
-    if (currentStroke && currentStroke.points.length > 1) {
+    if (currentStroke && currentStroke.points.length > 0) {
       drawStroke(currentStroke);
     }
-    // restore defaults
+
+    // restore defaults so later code can rely on them
     ctx.lineWidth = DEFAULT_WIDTH;
     ctx.strokeStyle = DEFAULT_COLOR;
   }
 
   function updateButtons(): void {
+    // Undo available if there’s anything in history OR a live stroke
     undoBtn.disabled = history.length === 0 && !currentStroke;
     redoBtn.disabled = redoStack.length === 0;
+    clearBtn.disabled = history.length === 0 && redoStack.length === 0 &&
+      !currentStroke;
+  }
+
+  canvas.addEventListener("drawing-changed", () => {
+    redrawAll();
+    updateButtons();
+  });
+
+  function fireDrawingChanged(): void {
+    canvas.dispatchEvent(new Event("drawing-changed"));
   }
 
   canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
-    redoStack.length = 0; // new input invalidates redo history
-    currentStroke = {
-      points: [],
-      width: DEFAULT_WIDTH,
-      color: DEFAULT_COLOR,
-    };
-    const { x, y } = getCanvasPos(e);
-    currentStroke.points.push({ x, y });
+    // New edit invalidates redo history
+    redoStack.length = 0;
+
+    currentStroke = { points: [], width: DEFAULT_WIDTH, color: DEFAULT_COLOR };
+    currentStroke.points.push(getCanvasPos(e));
+    fireDrawingChanged();
   });
 
   canvas.addEventListener("mousemove", (e) => {
     if (!isDrawing || !currentStroke) return;
-    const { x, y } = getCanvasPos(e);
-    currentStroke.points.push({ x, y });
-    redrawAll(); // live preview
+    currentStroke.points.push(getCanvasPos(e));
+    fireDrawingChanged(); // live preview via observer
   });
 
   const endStroke = () => {
@@ -146,43 +140,39 @@ import "./style.css";
       history.push(currentStroke);
     }
     currentStroke = null;
-    redrawAll();
-    updateButtons();
+    fireDrawingChanged();
   };
 
   canvas.addEventListener("mouseup", endStroke);
   canvas.addEventListener("mouseleave", endStroke);
 
-  // ---- Actions: Undo / Redo / Clear ----
   function doUndo(): void {
+    // If mid-stroke, cancel the in-progress stroke
     if (currentStroke) {
       currentStroke = null;
       isDrawing = false;
-      redrawAll();
-      updateButtons();
+      fireDrawingChanged();
       return;
     }
-    const s = history.pop();
-    if (!s) return;
+    if (history.length === 0) return;
+    const s = history.pop()!;
     redoStack.push(s);
-    redrawAll();
-    updateButtons();
+    fireDrawingChanged();
   }
 
   function doRedo(): void {
-    const s = redoStack.pop();
-    if (!s) return;
+    if (redoStack.length === 0) return;
+    const s = redoStack.pop()!;
     history.push(s);
-    redrawAll();
-    updateButtons();
+    fireDrawingChanged();
   }
 
   function doClear(): void {
     history.length = 0;
     redoStack.length = 0;
     currentStroke = null;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    updateButtons();
+    isDrawing = false;
+    fireDrawingChanged();
   }
 
   undoBtn.addEventListener("click", doUndo);
@@ -192,16 +182,15 @@ import "./style.css";
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
     if (!mod) return;
-    if (e.key.toLowerCase() === "z") {
+    const k = e.key.toLowerCase();
+    if (k === "z") {
       e.preventDefault();
-      if (e.shiftKey) doRedo();
-      else doUndo();
-    } else if (e.key.toLowerCase() === "y") {
+      e.shiftKey ? doRedo() : doUndo();
+    } else if (k === "y") {
       e.preventDefault();
       doRedo();
     }
   });
 
-  // Initial UI state
-  updateButtons();
+  fireDrawingChanged();
 })();
