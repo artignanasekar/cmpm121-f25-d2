@@ -245,8 +245,10 @@ import "./style.css";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const cmd of history) cmd.display(ctx);
 
+    // live command (while dragging)
     if (currentCmd) currentCmd.display(ctx);
 
+    // tool preview (only when not dragging)
     if (!isPointerDown) {
       if (activeTool === "marker" && markerPreview) markerPreview.display(ctx);
       if (activeTool === "sticker" && stickerPreview) {
@@ -254,6 +256,7 @@ import "./style.css";
       }
     }
 
+    // restore defaults so later code can rely on them
     ctx.lineWidth = DEFAULT_WIDTH;
     ctx.strokeStyle = DEFAULT_COLOR;
   }
@@ -292,6 +295,20 @@ import "./style.css";
       currentCmd = new StickerCommand(p, stickerEmoji, stickerSize);
     }
     fireDrawingChanged();
+  });
+
+  canvas.addEventListener("mousemove", (e) => {
+    const p = getCanvasPos(e);
+
+    if (isPointerDown && currentCmd) {
+      currentCmd.drag(p.x, p.y);
+      fireDrawingChanged(); // live preview via observer
+    } else {
+      // Step 7: tool preview updates
+      if (activeTool === "marker" && markerPreview) markerPreview.setPos(p);
+      if (activeTool === "sticker" && stickerPreview) stickerPreview.setPos(p);
+      fireToolMoved();
+    }
   });
 
   const endPointer = () => {
@@ -357,11 +374,28 @@ import "./style.css";
     }
   });
 
+  /* ---------------- Tool Selection (Step 6 & 8) ---------------- */
+  function updateToolSelectionUI() {
+    // Clear all selected states
+    for (const el of [thinBtn, thickBtn, ...stickerButtons]) {
+      el.classList.remove("selectedTool");
+    }
+
+    if (activeTool === "marker") {
+      (markerWidth === 4 ? thinBtn : thickBtn).classList.add("selectedTool");
+    } else {
+      const match = stickerButtons.find((b) =>
+        getButtonEmoji(b) === stickerEmoji
+      );
+      if (match) match.classList.add("selectedTool");
+    }
+  }
+
   function chooseMarker(width: number) {
     activeTool = "marker";
     markerWidth = width;
     if (markerPreview) markerPreview.setWidth(width);
-    //updateToolSelectionUI();
+    updateToolSelectionUI();
     fireToolMoved(); // refresh preview immediately
   }
 
@@ -374,7 +408,7 @@ import "./style.css";
       const e = getButtonEmoji(b);
       stickerEmoji = e;
       stickerPreview.setEmoji(e);
-      //updateToolSelectionUI();
+      updateToolSelectionUI();
       fireToolMoved(); // update preview position/emoji
     });
   }
