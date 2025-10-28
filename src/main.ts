@@ -49,7 +49,7 @@ import "./style.css";
   const stickerBar = document.createElement("div");
   stickerBar.className = "stickerbar";
   const stickerButtons: HTMLButtonElement[] = [];
-  const stickers: string[] = ["🐱", "⭐", "💫", "🌸", "🎈"];
+  const stickers: string[] = ["😝", "😏", "👯", "🌸", "🎈"];
   type StickerEmoji = string;
 
   const addStickerBtn = document.createElement("button");
@@ -63,6 +63,10 @@ import "./style.css";
       const e = getButtonEmoji(b);
       stickerEmoji = e;
       stickerPreview.setEmoji(e);
+
+      // Step 12: randomize rotation for next placement
+      stickerRotation = randomAngle();
+      stickerPreview.setAngle(stickerRotation);
 
       updateToolSelectionUI();
       fireToolMoved();
@@ -488,7 +492,6 @@ import "./style.css";
     fireToolMoved();
   });
 
-  // Step 9: custom sticker creation via prompt()
   addStickerBtn.addEventListener("click", () => {
     const text = prompt("Custom sticker text", "🧽");
     if (text === null) return;
@@ -507,7 +510,6 @@ import "./style.css";
     fireToolMoved();
   });
 
-  // Step 10: high-resolution export
   function exportHighResPNG(): void {
     const outSize = 1024;
     const scaleFactor = outSize / canvas.width; // 4x for 256→1024
@@ -527,10 +529,8 @@ import "./style.css";
   }
   exportBtn.addEventListener("click", exportHighResPNG);
 
-  // Build initial sticker bar (data-driven)
   rebuildStickerBar();
 
-  // Initialize default tool as thin marker
   chooseMarker(DEFAULT_WIDTH);
 
   fireDrawingChanged();
