@@ -49,8 +49,7 @@ import "./style.css";
   const stickerBar = document.createElement("div");
   stickerBar.className = "stickerbar";
   const stickerButtons: HTMLButtonElement[] = [];
-  // deno-lint-ignore prefer-const
-  let stickers: string[] = ["🐱", "⭐", "💫", "🌸", "🎈"];
+  const stickers: string[] = ["🐱", "⭐", "💫", "🌸", "🎈"];
   type StickerEmoji = string;
 
   const addStickerBtn = document.createElement("button");
@@ -64,10 +63,6 @@ import "./style.css";
       const e = getButtonEmoji(b);
       stickerEmoji = e;
       stickerPreview.setEmoji(e);
-
-      // Step 12: randomize rotation for next placement
-      stickerRotation = randomAngle();
-      stickerPreview.setAngle(stickerRotation);
 
       updateToolSelectionUI();
       fireToolMoved();
@@ -122,7 +117,7 @@ import "./style.css";
 
   // Tuned defaults (Step 11)
   const THIN_WIDTH = 3;
-  //const THICK_WIDTH = 10;
+  const THICK_WIDTH = 10;
   const DEFAULT_WIDTH = THIN_WIDTH;
   const DEFAULT_COLOR = "#111";
   const STICKER_SIZE = 28;
@@ -280,7 +275,7 @@ import "./style.css";
 
   // marker style (Step 12 randomizable color)
   let markerWidth = DEFAULT_WIDTH;
-  const markerColor = DEFAULT_COLOR;
+  let markerColor = DEFAULT_COLOR;
 
   // sticker style (Step 12 randomizable angle)
   let stickerEmoji: StickerEmoji = stickers[0] ?? "⭐";
@@ -303,10 +298,10 @@ import "./style.css";
     const r = canvas.getBoundingClientRect();
     return { x: evt.clientX - r.left, y: evt.clientY - r.top };
   }
-  // function randomHsl(): string {
-  //   const h = Math.floor(Math.random() * 360);
-  //   return `hsl(${h}, 80%, 35%)`;
-  // }
+  function randomHsl(): string {
+    const h = Math.floor(Math.random() * 360);
+    return `hsl(${h}, 80%, 35%)`;
+  }
   function randomAngle(): number {
     const deg = -30 + Math.random() * 60; // -30° to +30°
     return (deg * Math.PI) / 180;
@@ -450,6 +445,7 @@ import "./style.css";
     }
   });
 
+  /* ---------------- Tool Selection (Step 6, 8, 12) ---------------- */
   function updateToolSelectionUI() {
     // Clear all selected states
     for (const el of [thinBtn, thickBtn, ...stickerButtons]) {
@@ -476,6 +472,22 @@ import "./style.css";
     fireToolMoved(); // refresh preview immediately
   }
 
+  thinBtn.addEventListener("click", () => {
+    chooseMarker(THIN_WIDTH);
+    // Step 12: randomize next stroke color
+    markerColor = randomHsl();
+    markerPreview.setColor(markerColor);
+    fireToolMoved();
+  });
+
+  thickBtn.addEventListener("click", () => {
+    chooseMarker(THICK_WIDTH);
+    // Step 12: randomize next stroke color
+    markerColor = randomHsl();
+    markerPreview.setColor(markerColor);
+    fireToolMoved();
+  });
+
   // Step 9: custom sticker creation via prompt()
   addStickerBtn.addEventListener("click", () => {
     const text = prompt("Custom sticker text", "🧽");
@@ -494,6 +506,26 @@ import "./style.css";
     updateToolSelectionUI();
     fireToolMoved();
   });
+
+  // Step 10: high-resolution export
+  function exportHighResPNG(): void {
+    const outSize = 1024;
+    const scaleFactor = outSize / canvas.width; // 4x for 256→1024
+    const oc = document.createElement("canvas");
+    oc.width = outSize;
+    oc.height = outSize;
+    const octx = oc.getContext("2d")!;
+    octx.save();
+    octx.scale(scaleFactor, scaleFactor);
+    for (const cmd of history) cmd.display(octx); // only display list; no previews
+    octx.restore();
+
+    const anchor = document.createElement("a");
+    anchor.href = oc.toDataURL("image/png");
+    anchor.download = "sketchpad.png";
+    anchor.click();
+  }
+  exportBtn.addEventListener("click", exportHighResPNG);
 
   // Build initial sticker bar (data-driven)
   rebuildStickerBar();
