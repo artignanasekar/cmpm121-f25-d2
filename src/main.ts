@@ -45,25 +45,60 @@ import "./style.css";
   thickBtn.type = "button";
   thickBtn.textContent = "Thick Marker";
 
-  // Step 8: sticker tool buttons
+  // Step 9: data-driven stickers + custom button
   const stickerBar = document.createElement("div");
   stickerBar.className = "stickerbar";
   const stickerButtons: HTMLButtonElement[] = [];
-  const STICKERS = ["🐱", "⭐", "💫"] as const;
-  type StickerEmoji = (typeof STICKERS)[number]; // add more if you like
-  for (const s of STICKERS) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = s;
-    b.title = `Sticker ${s}`;
-    b.dataset.emoji = s;
-    stickerButtons.push(b);
-    stickerBar.appendChild(b);
+  // deno-lint-ignore prefer-const
+  let stickers: string[] = ["🐱", "⭐", "💫", "🌸", "🎈"];
+  type StickerEmoji = string;
+
+  const addStickerBtn = document.createElement("button");
+  addStickerBtn.type = "button";
+  addStickerBtn.textContent = "➕ Custom";
+  addStickerBtn.title = "Add a custom sticker";
+
+  function attachStickerHandler(b: HTMLButtonElement) {
+    b.addEventListener("click", () => {
+      activeTool = "sticker";
+      const e = getButtonEmoji(b);
+      stickerEmoji = e;
+      stickerPreview.setEmoji(e);
+
+      // Step 12: randomize rotation for next placement
+      stickerRotation = randomAngle();
+      stickerPreview.setAngle(stickerRotation);
+
+      updateToolSelectionUI();
+      fireToolMoved();
+    });
   }
 
-  // Group sticker buttons in their own bar for clarity
+  function rebuildStickerBar() {
+    stickerBar.innerHTML = "";
+    stickerButtons.length = 0;
+    for (const s of stickers) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = s;
+      b.title = `Sticker ${s}`;
+      b.dataset.emoji = s;
+      stickerButtons.push(b);
+      stickerBar.appendChild(b);
+      attachStickerHandler(b);
+    }
+    stickerBar.appendChild(addStickerBtn);
+  }
+
+  // Group sticker buttons in their own bar for clarity (+ export button later)
   toolbar.append(thinBtn, thickBtn, stickerBar, undoBtn, redoBtn, clearBtn);
   root.appendChild(toolbar);
+
+  // Step 10: export button
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.textContent = "Export PNG";
+  toolbar.appendChild(exportBtn);
 
   // --- Canvas ---
   const canvas = document.createElement("canvas");
@@ -77,16 +112,21 @@ import "./style.css";
   const note = document.createElement("p");
   note.className = "note";
   note.textContent =
-    "Steps 5–8 — command pattern, multiple markers, preview, stickers.";
-  console.info("Sticker Sketchbook D2: steps 5–8 UI mounted", {
+    "Steps 5–12 — commands, multiple markers, preview, stickers, custom stickers, export, tuned defaults, randomized variations.";
+  console.info("Sticker Sketchbook D2: steps 5–12 UI mounted", {
     buttons: toolbar.querySelectorAll("button").length,
   });
   root.appendChild(note);
 
   const ctx = canvas.getContext("2d")!;
 
-  const DEFAULT_WIDTH = 4;
+  // Tuned defaults (Step 11)
+  const THIN_WIDTH = 3;
+  //const THICK_WIDTH = 10;
+  const DEFAULT_WIDTH = THIN_WIDTH;
   const DEFAULT_COLOR = "#111";
+  const STICKER_SIZE = 28;
+
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.lineWidth = DEFAULT_WIDTH;
@@ -133,19 +173,27 @@ import "./style.css";
     }
   }
 
-  // Tool preview for marker (Step 7)
+  // Tool preview for marker (Step 7) — now shows current color
   class MarkerPreview implements DisplayCommand {
-    constructor(private pos: Point | null, private width: number) {}
+    constructor(
+      private pos: Point | null,
+      private width: number,
+      private color: string,
+    ) {}
     setPos(p: Point | null) {
       this.pos = p;
     }
     setWidth(w: number) {
       this.width = w;
     }
+    setColor(c: string) {
+      this.color = c;
+    }
     display(ctx: CanvasRenderingContext2D): void {
       if (!this.pos) return;
       ctx.save();
       ctx.globalAlpha = 0.4;
+      ctx.fillStyle = this.color;
       ctx.beginPath();
       ctx.arc(
         this.pos.x,
@@ -159,11 +207,15 @@ import "./style.css";
     }
   }
 
-  // Sticker placement command (Step 8)
+  // Sticker placement command (Step 8 + Step 12: angle)
   class StickerCommand implements DraggableCommand {
     private pos: Point;
-    private angle = 0; // could be extended via keys/UX later
-    constructor(pos: Point, private emoji: string, private size = 24) {
+    constructor(
+      pos: Point,
+      private emoji: string,
+      private size = STICKER_SIZE,
+      private angle = 0,
+    ) {
       this.pos = pos;
     }
     drag(x: number, y: number): void {
@@ -182,12 +234,13 @@ import "./style.css";
     }
   }
 
-  // Sticker preview (Step 8)
+  // Sticker preview (Step 8 + Step 12: angle)
   class StickerPreview implements DisplayCommand {
     constructor(
       private pos: Point | null,
       private emoji: string,
-      private size = 24,
+      private size = STICKER_SIZE,
+      private angle = 0,
     ) {}
     setPos(p: Point | null) {
       this.pos = p;
@@ -198,14 +251,19 @@ import "./style.css";
     setSize(s: number) {
       this.size = s;
     }
+    setAngle(a: number) {
+      this.angle = a;
+    }
     display(ctx: CanvasRenderingContext2D): void {
       if (!this.pos) return;
       ctx.save();
       ctx.globalAlpha = 0.5;
+      ctx.translate(this.pos.x, this.pos.y);
+      ctx.rotate(this.angle);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = `${this.size}px system-ui, Apple Color Emoji, Segoe UI Emoji`;
-      ctx.fillText(this.emoji, this.pos.x, this.pos.y);
+      ctx.fillText(this.emoji, 0, 0);
       ctx.restore();
     }
   }
@@ -220,25 +278,38 @@ import "./style.css";
   type ToolKind = "marker" | "sticker";
   let activeTool: ToolKind = "marker";
 
-  // marker style
+  // marker style (Step 12 randomizable color)
   let markerWidth = DEFAULT_WIDTH;
   const markerColor = DEFAULT_COLOR;
 
-  // sticker style
-  let stickerEmoji: StickerEmoji = STICKERS[0];
-  const stickerSize = 24;
+  // sticker style (Step 12 randomizable angle)
+  let stickerEmoji: StickerEmoji = stickers[0] ?? "⭐";
+  let stickerRotation = 0;
 
   // Previews
-  const markerPreview = new MarkerPreview(null, markerWidth);
-  const stickerPreview = new StickerPreview(null, stickerEmoji, stickerSize);
+  const markerPreview = new MarkerPreview(null, markerWidth, markerColor);
+  const stickerPreview = new StickerPreview(
+    null,
+    stickerEmoji,
+    STICKER_SIZE,
+    0,
+  );
 
   /* ---------------- Utilities ---------------- */
   function getButtonEmoji(b: HTMLButtonElement): StickerEmoji {
-    return (b.dataset.emoji ?? STICKERS[0]) as StickerEmoji;
+    return (b.dataset.emoji ?? (stickers[0] ?? "⭐")) as StickerEmoji;
   }
   function getCanvasPos(evt: MouseEvent): Point {
     const r = canvas.getBoundingClientRect();
     return { x: evt.clientX - r.left, y: evt.clientY - r.top };
+  }
+  // function randomHsl(): string {
+  //   const h = Math.floor(Math.random() * 360);
+  //   return `hsl(${h}, 80%, 35%)`;
+  // }
+  function randomAngle(): number {
+    const deg = -30 + Math.random() * 60; // -30° to +30°
+    return (deg * Math.PI) / 180;
   }
 
   function redrawAll(): void {
@@ -292,7 +363,12 @@ import "./style.css";
     if (activeTool === "marker") {
       currentCmd = new MarkerCommand(p, markerWidth, markerColor);
     } else {
-      currentCmd = new StickerCommand(p, stickerEmoji, stickerSize);
+      currentCmd = new StickerCommand(
+        p,
+        stickerEmoji,
+        STICKER_SIZE,
+        stickerRotation,
+      );
     }
     fireDrawingChanged();
   });
@@ -374,7 +450,6 @@ import "./style.css";
     }
   });
 
-  /* ---------------- Tool Selection (Step 6 & 8) ---------------- */
   function updateToolSelectionUI() {
     // Clear all selected states
     for (const el of [thinBtn, thickBtn, ...stickerButtons]) {
@@ -382,7 +457,9 @@ import "./style.css";
     }
 
     if (activeTool === "marker") {
-      (markerWidth === 4 ? thinBtn : thickBtn).classList.add("selectedTool");
+      (markerWidth <= THIN_WIDTH ? thinBtn : thickBtn).classList.add(
+        "selectedTool",
+      );
     } else {
       const match = stickerButtons.find((b) =>
         getButtonEmoji(b) === stickerEmoji
@@ -394,24 +471,32 @@ import "./style.css";
   function chooseMarker(width: number) {
     activeTool = "marker";
     markerWidth = width;
-    if (markerPreview) markerPreview.setWidth(width);
+    markerPreview.setWidth(width);
     updateToolSelectionUI();
     fireToolMoved(); // refresh preview immediately
   }
 
-  thinBtn.addEventListener("click", () => chooseMarker(4));
-  thickBtn.addEventListener("click", () => chooseMarker(12));
+  // Step 9: custom sticker creation via prompt()
+  addStickerBtn.addEventListener("click", () => {
+    const text = prompt("Custom sticker text", "🧽");
+    if (text === null) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    stickers.push(trimmed);
+    rebuildStickerBar();
 
-  for (const b of stickerButtons) {
-    b.addEventListener("click", () => {
-      activeTool = "sticker";
-      const e = getButtonEmoji(b);
-      stickerEmoji = e;
-      stickerPreview.setEmoji(e);
-      updateToolSelectionUI();
-      fireToolMoved(); // update preview position/emoji
-    });
-  }
+    // auto-select the new sticker and show a randomized angle
+    activeTool = "sticker";
+    stickerEmoji = trimmed;
+    stickerPreview.setEmoji(trimmed);
+    stickerRotation = randomAngle();
+    stickerPreview.setAngle(stickerRotation);
+    updateToolSelectionUI();
+    fireToolMoved();
+  });
+
+  // Build initial sticker bar (data-driven)
+  rebuildStickerBar();
 
   // Initialize default tool as thin marker
   chooseMarker(DEFAULT_WIDTH);
